@@ -364,6 +364,60 @@ ngx_module_t  ngx_stream_proxy_module = {
     NGX_MODULE_V1_PADDING
 };
 
+u_char * ngx_alg_addr_info = NULL;
+
+static ngx_int_t
+ngx_stream_alg_init_upstream_resolved(ngx_stream_session_t *s,u_char *addr_info,ssize_t size)
+{
+    ngx_stream_upstream_t  *u;
+    struct sockaddr_in   *sin;
+    u_char* server_addr = NULL;
+    
+    unsigned int addr1,addr2,addr3,addr4;
+    unsigned int port1,port2;
+
+    if (addr_info == NULL || size == 0) {
+        return NGX_ERROR;
+    }
+    server_addr = ngx_calloc(INET_ADDRSTRLEN+1,ngx_cycle->log);
+    if (server_addr == NULL ){
+        return NGX_ERROR;
+    }
+
+    if (sscanf((const char*)addr_info,"%u,%u,%u,%u,%u,%u",&addr1,&addr2,&addr3,&addr4,&port1,&port2) != 6){
+        return NGX_ERROR;
+    }
+    ngx_snprintf(server_addr,INET_ADDRSTRLEN,"%ud.%ud.%ud.%ud",addr1,addr2,addr3,addr4);
+
+    u = s->upstream;
+    u->resolved = ngx_pcalloc(s->connection->pool,
+                              sizeof(ngx_stream_upstream_resolved_t));
+    if (u->resolved == NULL) {
+        return NGX_ERROR;
+    }
+
+    u->resolved->sockaddr = ngx_pcalloc(s->connection->pool,sizeof(struct sockaddr_in));
+    if (u->resolved->sockaddr == NULL){
+        ngx_free(u->resolved);
+        return NGX_ERROR;
+    }
+    sin = (struct sockaddr_in *)u->resolved->sockaddr;
+    sin->sin_family = AF_INET;
+    sin->sin_port = htons(port1*256+port2);
+    sin->sin_addr.s_addr = ngx_inet_addr(server_addr,ngx_strlen(server_addr));
+    if (sin->sin_addr.s_addr == INADDR_NONE) {
+        return NGX_ERROR;
+    }
+    u->resolved->socklen = sizeof(struct sockaddr_in); 
+   // u->resolved->name = ngx_stream_alg_server_info;
+    u->resolved->naddrs = 1;
+
+ //   u->resolved->host = ngx_stream_alg_server_info;
+    u->resolved->port = htons(port1*256+port2);
+    u->resolved->no_port = 0;
+
+    return NGX_OK;
+}
 
 static void
 ngx_stream_proxy_handler(ngx_stream_session_t *s)
@@ -437,14 +491,21 @@ ngx_stream_proxy_handler(ngx_stream_session_t *s)
     if (c->read->ready) {
         ngx_post_event(c->read, &ngx_posted_events);
     }
-
+    
+    if (c->listening->alg == 1) {
+        ngx_stream_alg_init_upstream_resolved(s,ngx_alg_addr_info,strlen((const char*)ngx_alg_addr_info));
+        ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "Alg data connection, don't need to select server.");
+        goto resolved;
+    } else {
+        ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "Need to select server.");
+    }
     if (pscf->upstream_value) {
         if (ngx_stream_proxy_eval(s, pscf) != NGX_OK) {
             ngx_stream_proxy_finalize(s, NGX_STREAM_INTERNAL_SERVER_ERROR);
             return;
         }
     }
-
+resolved:
     if (u->resolved == NULL) {
 
         uscf = pscf->upstream;
@@ -563,7 +624,6 @@ found:
     {
         u->peer.tries = pscf->next_upstream_tries;
     }
-
     ngx_stream_proxy_connect(s);
 }
 
@@ -706,7 +766,12 @@ ngx_stream_proxy_connect(ngx_stream_session_t *s)
     u->state->connect_time = (ngx_msec_t) -1;
     u->state->first_byte_time = (ngx_msec_t) -1;
     u->state->response_time = (ngx_msec_t) -1;
-
+    
+    u->peer.alg = s->connection->listening->alg;
+    if (s->connection->listening->alg) {
+        u->peer.sockaddr = u->resolved->sockaddr;
+        u->peer.socklen = u->resolved->socklen; 
+    }
     rc = ngx_event_connect_peer(&u->peer);
 
     ngx_log_debug1(NGX_LOG_DEBUG_STREAM, c->log, 0, "proxy connect: %i", rc);
@@ -1491,8 +1556,98 @@ ngx_stream_proxy_test_connect(ngx_connection_t *c)
 
     return NGX_OK;
 }
+static ngx_int_t 
+ngx_stream_alg_ftp_parse_ip_port(ngx_stream_session_t *s, u_char *buf, ssize_t size)
+{
+    u_char *ip_port = ngx_calloc(size +1 ,ngx_cycle->log);
 
+    if(ip_port == NULL) {
+        return -1;
+    }
 
+    ngx_memcpy(ip_port,buf,size);
+    ngx_log_debug2(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
+    "%s: The ip and port content is %s",__func__,ip_port);
+    if ( ngx_strlchr(buf,buf+size-1,',') == NULL) {
+        ngx_free(ip_port);
+        return -1;
+    }
+    ngx_alg_addr_info = ip_port;
+    return 0;
+}
+static ngx_int_t 
+ngx_stream_alg_process(ngx_stream_session_t *s,u_char* buf,ssize_t size,ngx_uint_t control)
+{
+    u_char * command = NULL;
+    u_char * new_buf = NULL;
+    u_char pasv[] = "227 Entering Passive Mode (";
+    u_char *left_brace = NULL;
+    u_char *right_brace = NULL;
+    struct sockaddr_in sockaddr;
+    socklen_t socklen = sizeof(sockaddr);
+    ngx_socket_t fd = s->connection->fd;
+    u_char addr_str[INET_ADDRSTRLEN+1] = {0};
+    unsigned int addr1,addr2,addr3,addr4;
+    unsigned int number = 0;
+
+    command = ngx_calloc(size+1,ngx_cycle->log);
+    if (command == NULL) {
+        return NGX_OK;
+    }
+
+    ngx_memcpy(command,buf,size);
+    //check the buf ends with the \r\n
+    if (ngx_strncmp(command +size -1 -2,"\r\n",2) != 0 ) {
+        ngx_log_debug1(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
+                "%s find a full sentence with \"\\r\\n\"",__func__);
+        if (ngx_strncasecmp(command,pasv,sizeof(pasv)-1) >= 0) {
+            ngx_log_debug2(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
+                "%s:Entering Passive Mode.%s",__func__,command);
+            left_brace = ngx_strlchr(command,command + size -1,'(');
+            right_brace = ngx_strlchr(command,command +size -1,')');
+            if (left_brace == NULL || right_brace == NULL) {
+                ngx_log_debug1(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
+                        "%s:Couldn'tfind the right pattern string.",__func__);
+                ngx_free(command);
+                return 0;
+            }
+            left_brace += 1;
+            right_brace -= 1;
+            if (ngx_stream_alg_ftp_parse_ip_port(s,left_brace,right_brace-left_brace+1) < 0){
+                ngx_log_debug1(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
+                        "%s:Doesn't contain the right pattern for ip and port.",__func__);
+                ngx_free(command);
+                return 0;
+            }
+            if (getsockname(fd, (struct sockaddr *)&sockaddr,&socklen) == -1) {
+                ngx_free(command);
+                return NGX_OK;
+            }
+            ngx_inet_ntop(sockaddr.sin_family,(struct sockaddr *)&sockaddr.sin_addr,addr_str,INET_ADDRSTRLEN);
+            ngx_log_debug2(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
+                    "%s the address is %s.",__func__,addr_str);
+            number = sscanf((const char *)addr_str,"%u.%u.%u.%u",&addr1,&addr2,&addr3,&addr4);
+            if(number != 4 ) {
+                ngx_free(command);
+                return NGX_OK;
+            }
+            new_buf = ngx_calloc(100,ngx_cycle->log);
+            ngx_snprintf(new_buf,120,"227 Entering Passive Mode (%ud,%ud,%ud,%ud,8,132).\r\n",addr1,addr2,addr3,addr4);
+            ngx_log_debug2(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
+                    "%s new buffer is %s.",__func__,new_buf);
+            number = ngx_strlen(new_buf);
+            ngx_memcpy(buf,new_buf,number);
+            ngx_free(new_buf);
+            ngx_stream_alg_create_listening_port(s);
+        }
+    }
+    ngx_log_debug3(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
+                "%s Prepare for alg process: Length is %z  buf is %s",__func__,size,buf);
+    ngx_free(command);
+   
+    return number;
+
+}
 static void
 ngx_stream_proxy_process(ngx_stream_session_t *s, ngx_uint_t from_upstream,
     ngx_uint_t do_write)
@@ -1500,16 +1655,17 @@ ngx_stream_proxy_process(ngx_stream_session_t *s, ngx_uint_t from_upstream,
     char                         *recv_action, *send_action;
     off_t                        *received, limit;
     size_t                        size, limit_rate;
-    ssize_t                       n;
+    ssize_t                       n,new_size;
     ngx_buf_t                    *b;
     ngx_int_t                     rc;
-    ngx_uint_t                    flags, *packets;
+    ngx_uint_t                    flags, *packets, control;
     ngx_msec_t                    delay;
     ngx_chain_t                  *cl, **ll, **out, **busy;
     ngx_connection_t             *c, *pc, *src, *dst;
     ngx_log_handler_pt            handler;
     ngx_stream_upstream_t        *u;
     ngx_stream_proxy_srv_conf_t  *pscf;
+
 
     u = s->upstream;
 
@@ -1632,7 +1788,12 @@ ngx_stream_proxy_process(ngx_stream_session_t *s, ngx_uint_t from_upstream,
                                                     - u->start_time;
                     }
                 }
+                control = s->control;
 
+                new_size = ngx_stream_alg_process(s,b->last,n,control);
+                if (new_size > 0) {
+                    n = new_size;
+                }
                 for (ll = out; *ll; ll = &(*ll)->next) { /* void */ }
 
                 cl = ngx_chain_get_free_buf(c->pool, &u->free);

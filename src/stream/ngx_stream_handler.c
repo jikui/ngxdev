@@ -41,7 +41,7 @@ ngx_stream_init_connection(ngx_connection_t *c)
     /* find the server configuration for the address:port */
 
     port = c->listening->servers;
-
+    
     if (port->naddrs > 1) {
 
         /*
