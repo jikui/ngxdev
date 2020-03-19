@@ -608,14 +608,153 @@ ngx_timer_signal_handler(int signo)
 
 #endif
 
+ngx_int_t
+ngx_event_one_listening_init(ngx_listening_t *ls)
+{
+    ngx_connection_t    *c,*old;
+    ngx_event_t         *rev;
+
+#if (NGX_HAVE_EPOLLEXCLUSIVE)
+    volatile ngx_cycle_t * cycle = ngx_cycle;
+    ngx_core_conf_t     *ccf;
+    ccf = (ngx_core_conf_t *) ngx_get_conf(cycle->conf_ctx, ngx_core_module);
+#endif
+
+#if (NGX_HAVE_REUSEPORT)
+    if (ls->reuseport && ls->worker != ngx_worker) {
+        return NGX_OK;
+    }
+#endif
+
+    c = ngx_get_connection(ls->fd, ngx_cycle->log);
+
+    if (c == NULL) {
+        return NGX_ERROR;
+    }
+
+    c->type = ls->type;
+    c->log = &ls->log;
+
+    c->listening = ls;
+    ls->connection = c;
+
+    rev = c->read;
+
+    rev->log = c->log;
+    rev->accept = 1;
+
+#if (NGX_HAVE_DEFERRED_ACCEPT)
+    rev->deferred_accept = ls->deferred_accept;
+#endif
+
+    if (!(ngx_event_flags & NGX_USE_IOCP_EVENT)) {
+        if (ls->previous) {
+
+            /*
+             * delete the old accept events that were bound to
+             * the old cycle read events array
+             */
+
+            old = ls->previous->connection;
+
+            if (ngx_del_event(old->read, NGX_READ_EVENT, NGX_CLOSE_EVENT)
+                    == NGX_ERROR)
+            {
+                return NGX_ERROR;
+            }
+
+            old->fd = (ngx_socket_t) -1;
+        }
+    }
+
+#if (NGX_WIN32)
+
+    if (ngx_event_flags & NGX_USE_IOCP_EVENT) {
+        ngx_iocp_conf_t  *iocpcf;
+
+        rev->handler = ngx_event_acceptex;
+
+        if (ngx_use_accept_mutex) {
+            return NGX_OK;
+        }
+
+        if (ngx_add_event(rev, 0, NGX_IOCP_ACCEPT) == NGX_ERROR) {
+            return NGX_ERROR;
+        }
+
+        ls->log.handler = ngx_acceptex_log_error;
+
+        iocpcf = ngx_event_get_conf(cycle->conf_ctx, ngx_iocp_module);
+        if (ngx_event_post_acceptex(ls, iocpcf->post_acceptex)
+                == NGX_ERROR)
+        {
+            return NGX_ERROR;
+        }
+
+    } else {
+        rev->handler = ngx_event_accept;
+
+        if (ngx_use_accept_mutex) {
+            return NGX_OK;
+        }
+
+        if (ngx_add_event(rev, NGX_READ_EVENT, 0) == NGX_ERROR) {
+            return NGX_ERROR;
+        }
+    }
+
+#else
+
+    rev->handler = (c->type == SOCK_STREAM) ? ngx_event_accept
+        : ngx_event_recvmsg;
+
+#if (NGX_HAVE_REUSEPORT)
+
+    if (ls->reuseport) {
+        if (ngx_add_event(rev, NGX_READ_EVENT, 0) == NGX_ERROR) {
+            return NGX_ERROR;
+        }
+        return NGX_OK;
+    }
+
+#endif
+
+    if (ngx_use_accept_mutex) {
+        return NGX_OK;
+    }
+
+#if (NGX_HAVE_EPOLLEXCLUSIVE)
+
+    if ((ngx_event_flags & NGX_USE_EPOLL_EVENT)
+            && ccf->worker_processes > 1)
+    {
+        if (ngx_add_event(rev, NGX_READ_EVENT, NGX_EXCLUSIVE_EVENT)
+                == NGX_ERROR)
+        {
+            return NGX_ERROR;
+        }
+
+        return NGX_OK;
+    }
+
+#endif
+
+    if (ngx_add_event(rev, NGX_READ_EVENT, 0) == NGX_ERROR) {
+        return NGX_ERROR;
+    }
+
+#endif
+    return NGX_OK;
+
+}
 
 static ngx_int_t
 ngx_event_process_init(ngx_cycle_t *cycle)
 {
     ngx_uint_t           m, i;
-    ngx_event_t         *rev, *wev;
     ngx_listening_t     *ls;
-    ngx_connection_t    *c, *next, *old;
+    ngx_event_t         *rev, *wev;
+    ngx_connection_t    *c, *next;
     ngx_core_conf_t     *ccf;
     ngx_event_conf_t    *ecf;
     ngx_event_module_t  *module;
@@ -778,133 +917,9 @@ ngx_event_process_init(ngx_cycle_t *cycle)
 
     ls = cycle->listening.elts;
     for (i = 0; i < cycle->listening.nelts; i++) {
-
-#if (NGX_HAVE_REUSEPORT)
-        if (ls[i].reuseport && ls[i].worker != ngx_worker) {
-            continue;
-        }
-#endif
-
-        c = ngx_get_connection(ls[i].fd, cycle->log);
-
-        if (c == NULL) {
+        if (ngx_event_one_listening_init(&ls[i]) != NGX_OK) {
             return NGX_ERROR;
-        }
-
-        c->type = ls[i].type;
-        c->log = &ls[i].log;
-
-        c->listening = &ls[i];
-        ls[i].connection = c;
-
-        rev = c->read;
-
-        rev->log = c->log;
-        rev->accept = 1;
-
-#if (NGX_HAVE_DEFERRED_ACCEPT)
-        rev->deferred_accept = ls[i].deferred_accept;
-#endif
-
-        if (!(ngx_event_flags & NGX_USE_IOCP_EVENT)) {
-            if (ls[i].previous) {
-
-                /*
-                 * delete the old accept events that were bound to
-                 * the old cycle read events array
-                 */
-
-                old = ls[i].previous->connection;
-
-                if (ngx_del_event(old->read, NGX_READ_EVENT, NGX_CLOSE_EVENT)
-                    == NGX_ERROR)
-                {
-                    return NGX_ERROR;
-                }
-
-                old->fd = (ngx_socket_t) -1;
-            }
-        }
-
-#if (NGX_WIN32)
-
-        if (ngx_event_flags & NGX_USE_IOCP_EVENT) {
-            ngx_iocp_conf_t  *iocpcf;
-
-            rev->handler = ngx_event_acceptex;
-
-            if (ngx_use_accept_mutex) {
-                continue;
-            }
-
-            if (ngx_add_event(rev, 0, NGX_IOCP_ACCEPT) == NGX_ERROR) {
-                return NGX_ERROR;
-            }
-
-            ls[i].log.handler = ngx_acceptex_log_error;
-
-            iocpcf = ngx_event_get_conf(cycle->conf_ctx, ngx_iocp_module);
-            if (ngx_event_post_acceptex(&ls[i], iocpcf->post_acceptex)
-                == NGX_ERROR)
-            {
-                return NGX_ERROR;
-            }
-
-        } else {
-            rev->handler = ngx_event_accept;
-
-            if (ngx_use_accept_mutex) {
-                continue;
-            }
-
-            if (ngx_add_event(rev, NGX_READ_EVENT, 0) == NGX_ERROR) {
-                return NGX_ERROR;
-            }
-        }
-
-#else
-
-        rev->handler = (c->type == SOCK_STREAM) ? ngx_event_accept
-                                                : ngx_event_recvmsg;
-
-#if (NGX_HAVE_REUSEPORT)
-
-        if (ls[i].reuseport) {
-            if (ngx_add_event(rev, NGX_READ_EVENT, 0) == NGX_ERROR) {
-                return NGX_ERROR;
-            }
-
-            continue;
-        }
-
-#endif
-
-        if (ngx_use_accept_mutex) {
-            continue;
-        }
-
-#if (NGX_HAVE_EPOLLEXCLUSIVE)
-
-        if ((ngx_event_flags & NGX_USE_EPOLL_EVENT)
-            && ccf->worker_processes > 1)
-        {
-            if (ngx_add_event(rev, NGX_READ_EVENT, NGX_EXCLUSIVE_EVENT)
-                == NGX_ERROR)
-            {
-                return NGX_ERROR;
-            }
-
-            continue;
-        }
-
-#endif
-
-        if (ngx_add_event(rev, NGX_READ_EVENT, 0) == NGX_ERROR) {
-            return NGX_ERROR;
-        }
-
-#endif
-
+        }   
     }
 
     return NGX_OK;

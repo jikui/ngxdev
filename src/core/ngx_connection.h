@@ -79,6 +79,7 @@ struct ngx_listening_s {
     unsigned            deferred_accept:1;
     unsigned            delete_deferred:1;
     unsigned            add_deferred:1;
+    unsigned            alg:1;
 #if (NGX_HAVE_DEFERRED_ACCEPT && defined SO_ACCEPTFILTER)
     char               *accept_filter;
 #endif
@@ -89,7 +90,6 @@ struct ngx_listening_s {
 #if (NGX_HAVE_TCP_FASTOPEN)
     int                 fastopen;
 #endif
-
 };
 
 
@@ -212,6 +212,7 @@ ngx_listening_t *ngx_create_listening(ngx_conf_t *cf, struct sockaddr *sockaddr,
 ngx_int_t ngx_clone_listening(ngx_cycle_t *cycle, ngx_listening_t *ls);
 ngx_int_t ngx_set_inherited_sockets(ngx_cycle_t *cycle);
 ngx_int_t ngx_open_listening_sockets(ngx_cycle_t *cycle);
+ngx_int_t ngx_open_one_listening_socket(ngx_listening_t *ls);
 void ngx_configure_listening_sockets(ngx_cycle_t *cycle);
 void ngx_close_listening_sockets(ngx_cycle_t *cycle);
 void ngx_close_connection(ngx_connection_t *c);
