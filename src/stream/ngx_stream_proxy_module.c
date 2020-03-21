@@ -1561,6 +1561,7 @@ ngx_stream_alg_ftp_parse_ip_port(ngx_stream_session_t *s, u_char *buf, ssize_t s
 {
     u_char *ip_port = ngx_calloc(size +1 ,ngx_cycle->log);
 
+
     if(ip_port == NULL) {
         return -1;
     }
@@ -1581,6 +1582,7 @@ ngx_stream_alg_process(ngx_stream_session_t *s,u_char* buf,ssize_t size,ngx_uint
     u_char * command = NULL;
     u_char * new_buf = NULL;
     u_char pasv[] = "227 Entering Passive Mode (";
+    u_char port[] = "PORT ";
     u_char *left_brace = NULL;
     u_char *right_brace = NULL;
     struct sockaddr_in sockaddr;
@@ -1589,6 +1591,7 @@ ngx_stream_alg_process(ngx_stream_session_t *s,u_char* buf,ssize_t size,ngx_uint
     u_char addr_str[INET_ADDRSTRLEN+1] = {0};
     unsigned int addr1,addr2,addr3,addr4;
     unsigned int number = 0;
+    unsigned int entering_alg = 0;
 
     command = ngx_calloc(size+1,ngx_cycle->log);
     if (command == NULL) {
@@ -1600,7 +1603,7 @@ ngx_stream_alg_process(ngx_stream_session_t *s,u_char* buf,ssize_t size,ngx_uint
     if (ngx_strncmp(command +size -1 -2,"\r\n",2) != 0 ) {
         ngx_log_debug1(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
                 "%s find a full sentence with \"\\r\\n\"",__func__);
-        if (ngx_strncasecmp(command,pasv,sizeof(pasv)-1) >= 0) {
+        if (ngx_strstr(command,pasv) != NULL) {
             ngx_log_debug2(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
                 "%s:Entering Passive Mode.%s",__func__,command);
             left_brace = ngx_strlchr(command,command + size -1,'(');
@@ -1611,6 +1614,21 @@ ngx_stream_alg_process(ngx_stream_session_t *s,u_char* buf,ssize_t size,ngx_uint
                 ngx_free(command);
                 return 0;
             }
+            entering_alg = 1;
+        }else if (ngx_strstr(command,port) != NULL) {
+            ngx_log_debug2(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
+                "%s:Entering Port Mode.%s",__func__,command);
+            left_brace = ngx_strlchr(command,command + size -1,' ');
+            right_brace = ngx_strlchr(command,command +size -1,'\r');
+            if (left_brace == NULL || right_brace == NULL) {
+                ngx_log_debug1(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
+                        "%s:Couldn't find the right pattern string.",__func__);
+                ngx_free(command);
+                return 0;
+            }
+            entering_alg = 2;
+        }
+        if (entering_alg > 0) {
             left_brace += 1;
             right_brace -= 1;
             if (ngx_stream_alg_ftp_parse_ip_port(s,left_brace,right_brace-left_brace+1) < 0){
@@ -1619,20 +1637,36 @@ ngx_stream_alg_process(ngx_stream_session_t *s,u_char* buf,ssize_t size,ngx_uint
                 ngx_free(command);
                 return 0;
             }
-            if (getsockname(fd, (struct sockaddr *)&sockaddr,&socklen) == -1) {
-                ngx_free(command);
-                return NGX_OK;
+            if (entering_alg == 1) {
+                if (getsockname(fd, (struct sockaddr *)&sockaddr,&socklen) == -1) {
+                    ngx_free(command);
+                    return NGX_OK;
+                }
+                ngx_inet_ntop(sockaddr.sin_family,(struct sockaddr *)&sockaddr.sin_addr,addr_str,INET_ADDRSTRLEN);
+                ngx_log_debug2(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
+                        "%s the address is %s.",__func__,addr_str);
+                number = sscanf((const char *)addr_str,"%u.%u.%u.%u",&addr1,&addr2,&addr3,&addr4);
+            }else {
+                fd = s->upstream ->peer.connection->fd;
+                if (getsockname(fd, (struct sockaddr *)&sockaddr,&socklen) == -1) {
+                    ngx_free(command);
+                    return NGX_OK;
+                }
+                ngx_inet_ntop(sockaddr.sin_family,(struct sockaddr *)&sockaddr.sin_addr,addr_str,INET_ADDRSTRLEN);
+                ngx_log_debug2(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
+                        "%s the address is %s.",__func__,addr_str);
+                number = sscanf((const char *)addr_str,"%u.%u.%u.%u",&addr1,&addr2,&addr3,&addr4);
             }
-            ngx_inet_ntop(sockaddr.sin_family,(struct sockaddr *)&sockaddr.sin_addr,addr_str,INET_ADDRSTRLEN);
-            ngx_log_debug2(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
-                    "%s the address is %s.",__func__,addr_str);
-            number = sscanf((const char *)addr_str,"%u.%u.%u.%u",&addr1,&addr2,&addr3,&addr4);
             if(number != 4 ) {
                 ngx_free(command);
                 return NGX_OK;
             }
             new_buf = ngx_calloc(100,ngx_cycle->log);
-            ngx_snprintf(new_buf,120,"227 Entering Passive Mode (%ud,%ud,%ud,%ud,8,132).\r\n",addr1,addr2,addr3,addr4);
+            if (entering_alg == 1) {
+                ngx_snprintf(new_buf,120,"227 Entering Passive Mode (%ud,%ud,%ud,%ud,8,132).\r\n",addr1,addr2,addr3,addr4);
+            }else {
+                ngx_snprintf(new_buf,120,"PORT %ud,%ud,%ud,%ud,8,132\r\n",addr1,addr2,addr3,addr4);
+            }
             ngx_log_debug2(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
                     "%s new buffer is %s.",__func__,new_buf);
             number = ngx_strlen(new_buf);
@@ -1642,15 +1676,15 @@ ngx_stream_alg_process(ngx_stream_session_t *s,u_char* buf,ssize_t size,ngx_uint
         }
     }
     ngx_log_debug3(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
-                "%s Prepare for alg process: Length is %z  buf is %s",__func__,size,buf);
+            "%s Prepare for alg process: Length is %z  buf is %s",__func__,size,buf);
     ngx_free(command);
-   
+
     return number;
 
 }
-static void
+    static void
 ngx_stream_proxy_process(ngx_stream_session_t *s, ngx_uint_t from_upstream,
-    ngx_uint_t do_write)
+        ngx_uint_t do_write)
 {
     char                         *recv_action, *send_action;
     off_t                        *received, limit;
