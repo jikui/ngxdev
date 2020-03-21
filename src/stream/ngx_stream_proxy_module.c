@@ -1561,6 +1561,7 @@ ngx_stream_alg_ftp_parse_ip_port(ngx_stream_session_t *s, u_char *buf, ssize_t s
 {
     u_char *ip_port = ngx_calloc(size +1 ,ngx_cycle->log);
 
+
     if(ip_port == NULL) {
         return -1;
     }
