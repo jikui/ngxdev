@@ -56,7 +56,6 @@ typedef struct {
     ngx_uint_t                   *flushes;
     void                         *lengths;
     void                         *values;
-
     union {
         size_t                    size;
     } u;

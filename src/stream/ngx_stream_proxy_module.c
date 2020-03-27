@@ -385,6 +385,7 @@ ngx_stream_alg_init_upstream_resolved(ngx_stream_session_t *s,u_char *addr_info,
     }
 
     if (sscanf((const char*)addr_info,"%u,%u,%u,%u,%u,%u",&addr1,&addr2,&addr3,&addr4,&port1,&port2) != 6){
+        ngx_free(server_addr);
         return NGX_ERROR;
     }
     ngx_snprintf(server_addr,INET_ADDRSTRLEN,"%ud.%ud.%ud.%ud",addr1,addr2,addr3,addr4);
@@ -393,11 +394,13 @@ ngx_stream_alg_init_upstream_resolved(ngx_stream_session_t *s,u_char *addr_info,
     u->resolved = ngx_pcalloc(s->connection->pool,
                               sizeof(ngx_stream_upstream_resolved_t));
     if (u->resolved == NULL) {
+        ngx_free(server_addr);
         return NGX_ERROR;
     }
 
     u->resolved->sockaddr = ngx_pcalloc(s->connection->pool,sizeof(struct sockaddr_in));
     if (u->resolved->sockaddr == NULL){
+        ngx_free(server_addr);
         ngx_free(u->resolved);
         return NGX_ERROR;
     }
@@ -406,6 +409,8 @@ ngx_stream_alg_init_upstream_resolved(ngx_stream_session_t *s,u_char *addr_info,
     sin->sin_port = htons(port1*256+port2);
     sin->sin_addr.s_addr = ngx_inet_addr(server_addr,ngx_strlen(server_addr));
     if (sin->sin_addr.s_addr == INADDR_NONE) {
+        ngx_free(server_addr);
+        ngx_free(u->resolved);
         return NGX_ERROR;
     }
     u->resolved->socklen = sizeof(struct sockaddr_in); 
@@ -416,6 +421,7 @@ ngx_stream_alg_init_upstream_resolved(ngx_stream_session_t *s,u_char *addr_info,
     u->resolved->port = htons(port1*256+port2);
     u->resolved->no_port = 0;
 
+    ngx_free(server_addr);
     return NGX_OK;
 }
 
@@ -1480,7 +1486,7 @@ ngx_stream_proxy_process_connection(ngx_event_t *ev, ngx_uint_t from_upstream)
     if (from_upstream && !u->connected) {
         return;
     }
-
+    
     ngx_stream_proxy_process(s, from_upstream, ev->write);
 }
 
