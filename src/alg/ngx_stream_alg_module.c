@@ -17,6 +17,7 @@
 
 
 typedef struct {
+
     ngx_flag_t       alg_ftp:1;
 } ngx_stream_alg_srv_conf_t;
 
@@ -85,10 +86,12 @@ ngx_stream_alg_create_srv_conf(ngx_conf_t *cf)
 {
     ngx_stream_alg_srv_conf_t  *conf;
 
+
     conf = ngx_pcalloc(cf->pool, sizeof(ngx_stream_alg_srv_conf_t));
     if (conf == NULL) {
         return NULL;
     }
+
 
     return conf;
 }
@@ -99,7 +102,6 @@ ngx_stream_alg_init(ngx_conf_t *cf)
 {
     ngx_stream_handler_pt        *h;
     ngx_stream_core_main_conf_t  *cmcf;
-
 
     cmcf = ngx_stream_conf_get_module_main_conf(cf, ngx_stream_core_module);
 
@@ -116,6 +118,7 @@ ngx_stream_alg_init(ngx_conf_t *cf)
 static ngx_int_t
 ngx_stream_alg_handler(ngx_stream_session_t *s)
 {
+
     ngx_stream_alg_srv_conf_t  *ascf;
     ngx_connection_t *c;//,*pc,*src,*dst;
     ngx_stream_alg_ctx_t       *ctx;
@@ -147,7 +150,7 @@ ngx_stream_alg_handler(ngx_stream_session_t *s)
         ctx->log = c->log;
         ctx->pos = c->buffer->pos;
     }
-    
+   
     p = ctx->pos;
     last = c->buffer->last;
     /*Find the \r\n pattern*/
@@ -163,11 +166,13 @@ ngx_stream_alg_handler(ngx_stream_session_t *s)
         }
     } 
     return NGX_AGAIN;
+
 }
 
 char *
 ngx_stream_alg_alg(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
+
     ngx_stream_alg_srv_conf_t *ascf = conf;
     ngx_str_t                       *value;
     value = cf->args->elts;
