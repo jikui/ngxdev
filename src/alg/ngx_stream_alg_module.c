@@ -17,9 +17,23 @@
 
 
 typedef struct {
-    ngx_uint_t       alg_ftp:1;
+    ngx_flag_t       alg_ftp;
 } ngx_stream_alg_srv_conf_t;
 
+typedef struct {
+    size_t          left;
+    size_t          size;
+    size_t          ext;
+    u_char         *pos;
+    u_char         *dst;
+    u_char          buf[4];
+    u_char          version[2];
+    ngx_str_t       host;
+    ngx_str_t       alpn;
+    ngx_log_t      *log;
+    ngx_pool_t     *pool;
+    ngx_uint_t      state;
+} ngx_stream_alg_ctx_t;
 
 static ngx_int_t ngx_stream_alg_init(ngx_conf_t *cf);
 static ngx_int_t ngx_stream_alg_handler(ngx_stream_session_t *s);
@@ -71,15 +85,13 @@ ngx_stream_alg_create_srv_conf(ngx_conf_t *cf)
 {
     ngx_stream_alg_srv_conf_t  *conf;
 
-    conf = ngx_palloc(cf->pool, sizeof(ngx_stream_alg_srv_conf_t));
+    conf = ngx_pcalloc(cf->pool, sizeof(ngx_stream_alg_srv_conf_t));
     if (conf == NULL) {
         return NULL;
     }
-    
-    conf->alg_ftp = 0;
+
     return conf;
 }
-
 
 static ngx_int_t
 ngx_stream_alg_init(ngx_conf_t *cf)
@@ -102,105 +114,67 @@ ngx_stream_alg_init(ngx_conf_t *cf)
 static ngx_int_t
 ngx_stream_alg_handler(ngx_stream_session_t *s)
 {
-#if 0
+
+    ngx_stream_alg_srv_conf_t  *ascf;
+    ngx_connection_t *c;//,*pc,*src,*dst;
+    ngx_stream_alg_ctx_t       *ctx;
     u_char                             *last, *p;
-    size_t                              len;
-    ngx_int_t                           rc;
-    ngx_connection_t                   *c;
-    ngx_stream_ssl_preread_ctx_t       *ctx;
-    ngx_stream_ssl_preread_srv_conf_t  *sscf;
+    ssize_t    len;
 
+    ascf = ngx_stream_get_module_srv_conf(s,ngx_stream_alg_module);
+    if (ascf->alg_ftp != 0 ) {
+        return NGX_DECLINED;
+    }
     c = s->connection;
-
-    ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "ssl preread handler");
-
-    sscf = ngx_stream_get_module_srv_conf(s, ngx_stream_ssl_preread_module);
-
-    if (!sscf->enabled) {
+    
+    if ( c->type != SOCK_STREAM ) {
         return NGX_DECLINED;
     }
-
-    if (c->type != SOCK_STREAM) {
+    
+    if ( c->buffer == NULL ) {
         return NGX_DECLINED;
     }
-
-    if (c->buffer == NULL) {
-        return NGX_AGAIN;
-    }
-
-    ctx = ngx_stream_get_module_ctx(s, ngx_stream_ssl_preread_module);
+    
+    ctx = ngx_stream_get_module_ctx(s, ngx_stream_alg_module);
     if (ctx == NULL) {
-        ctx = ngx_pcalloc(c->pool, sizeof(ngx_stream_ssl_preread_ctx_t));
+        ctx = ngx_pcalloc(c->pool, sizeof(ngx_stream_alg_ctx_t));
         if (ctx == NULL) {
             return NGX_ERROR;
         }
-
-        ngx_stream_set_ctx(s, ctx, ngx_stream_ssl_preread_module);
-
+        ngx_stream_set_ctx(s, ctx, ngx_stream_alg_module);
         ctx->pool = c->pool;
         ctx->log = c->log;
         ctx->pos = c->buffer->pos;
     }
-
+   
     p = ctx->pos;
     last = c->buffer->last;
-
-    while (last - p >= 5) {
-
-        if ((p[0] & 0x80) && p[2] == 1 && (p[3] == 0 || p[3] == 3)) {
-            ngx_log_debug0(NGX_LOG_DEBUG_STREAM, ctx->log, 0,
-                           "ssl preread: version 2 ClientHello");
-            ctx->version[0] = p[3];
-            ctx->version[1] = p[4];
-            return NGX_OK;
-        }
-
-        if (p[0] != 0x16) {
-            ngx_log_debug0(NGX_LOG_DEBUG_STREAM, ctx->log, 0,
-                           "ssl preread: not a handshake");
-            ngx_stream_set_ctx(s, NULL, ngx_stream_ssl_preread_module);
+    /*Find the \r\n pattern*/
+    len = last - p;
+    if (len >= 2 ) {
+        /*If find the "\r\n*/
+        if (ngx_strncmp(p,CRLF,ngx_strlen(CRLF)) != 0) {
+            p += len;
+            ctx->pos = p;
             return NGX_DECLINED;
+        } else {
+            return NGX_AGAIN;
         }
-
-        if (p[1] != 3) {
-            ngx_log_debug0(NGX_LOG_DEBUG_STREAM, ctx->log, 0,
-                           "ssl preread: unsupported SSL version");
-            ngx_stream_set_ctx(s, NULL, ngx_stream_ssl_preread_module);
-            return NGX_DECLINED;
-        }
-
-        len = (p[3] << 8) + p[4];
-
-        /* read the whole record before parsing */
-        if ((size_t) (last - p) < len + 5) {
-            break;
-        }
-
-        p += 5;
-
-        rc = ngx_stream_ssl_preread_parse_record(ctx, p, p + len);
-
-        if (rc == NGX_DECLINED) {
-            ngx_stream_set_ctx(s, NULL, ngx_stream_ssl_preread_module);
-            return NGX_DECLINED;
-        }
-
-        if (rc != NGX_AGAIN) {
-            return rc;
-        }
-
-        p += len;
-    }
-
-    ctx->pos = p;
-#endif
-    return NGX_DECLINED;
+    } 
+    return NGX_AGAIN;
 }
 
 char *
 ngx_stream_alg_alg(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
 {
-    ngx_stream_alg_srv_conf_t *acf = conf;
-    acf->alg_ftp = 1;
+
+    ngx_stream_alg_srv_conf_t *ascf = conf;
+    ngx_str_t                       *value;
+    value = cf->args->elts;
+    if (ngx_strcmp(value[1].data,"ftp") == 0) {
+        ascf->alg_ftp = 1;
+    } else {
+        return NGX_CONF_ERROR;
+    }
     return NGX_CONF_OK;
 }

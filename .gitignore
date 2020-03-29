@@ -43,7 +43,7 @@ coverage-all.html
 cilium/bash_autocomplete
 *.swo
 outgoing
-
+src/cscope.out
 *cscope.files
 *cscope.out
 *cscope.in.out
