@@ -498,7 +498,7 @@ ngx_stream_proxy_handler(ngx_stream_session_t *s)
         ngx_post_event(c->read, &ngx_posted_events);
     }
     
-    if (c->listening->alg == 1) {
+    if (c->listening->child == 1) {
         ngx_stream_alg_init_upstream_resolved(s,ngx_alg_addr_info,strlen((const char*)ngx_alg_addr_info));
         ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "Alg data connection, don't need to select server.");
         goto resolved;
@@ -774,7 +774,7 @@ ngx_stream_proxy_connect(ngx_stream_session_t *s)
     u->state->response_time = (ngx_msec_t) -1;
     
     u->peer.alg = s->connection->listening->alg;
-    if (s->connection->listening->alg) {
+    if (s->connection->listening->child) {
         u->peer.sockaddr = u->resolved->sockaddr;
         u->peer.socklen = u->resolved->socklen; 
     }
@@ -1583,7 +1583,7 @@ ngx_stream_alg_ftp_parse_ip_port(ngx_stream_session_t *s, u_char *buf, ssize_t s
     return 0;
 }
 static ngx_int_t 
-ngx_stream_alg_process(ngx_stream_session_t *s,u_char* buf,ssize_t size,ngx_uint_t control)
+ngx_stream_alg_process(ngx_stream_session_t *s,u_char* buf,ssize_t size)
 {
     u_char * command = NULL;
     u_char * new_buf = NULL;
@@ -1698,7 +1698,7 @@ ngx_stream_proxy_process(ngx_stream_session_t *s, ngx_uint_t from_upstream,
     ssize_t                       n,new_size;
     ngx_buf_t                    *b;
     ngx_int_t                     rc;
-    ngx_uint_t                    flags, *packets, control;
+    ngx_uint_t                    flags, *packets;
     ngx_msec_t                    delay;
     ngx_chain_t                  *cl, **ll, **out, **busy;
     ngx_connection_t             *c, *pc, *src, *dst;
@@ -1828,11 +1828,11 @@ ngx_stream_proxy_process(ngx_stream_session_t *s, ngx_uint_t from_upstream,
                                                     - u->start_time;
                     }
                 }
-                control = s->control;
-
-                new_size = ngx_stream_alg_process(s,b->last,n,control);
-                if (new_size > 0) {
-                    n = new_size;
+                if(s->connection->listening->alg == 1) {
+                    new_size = ngx_stream_alg_process(s,b->last,n);
+                    if (new_size > 0) {
+                        n = new_size;
+                    }
                 }
                 for (ll = out; *ll; ll = &(*ll)->next) { /* void */ }
 

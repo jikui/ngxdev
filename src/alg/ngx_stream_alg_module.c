@@ -116,13 +116,14 @@ ngx_stream_alg_handler(ngx_stream_session_t *s)
 {
 
     ngx_stream_alg_srv_conf_t  *ascf;
-    ngx_connection_t *c;//,*pc,*src,*dst;
+    ngx_connection_t *c;
     ngx_stream_alg_ctx_t       *ctx;
     u_char                             *last, *p;
     ssize_t    len;
+    ngx_listening_t             *ls;
 
     ascf = ngx_stream_get_module_srv_conf(s,ngx_stream_alg_module);
-    if (ascf->alg_ftp != 0 ) {
+    if (ascf->alg_ftp != 1 ) {
         return NGX_DECLINED;
     }
     c = s->connection;
@@ -131,6 +132,12 @@ ngx_stream_alg_handler(ngx_stream_session_t *s)
         return NGX_DECLINED;
     }
     
+    ls = c->listening;
+
+    if (ls->child != 1) {
+        ls->alg = 1;
+    }
+
     if ( c->buffer == NULL ) {
         return NGX_DECLINED;
     }

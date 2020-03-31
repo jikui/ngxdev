@@ -459,7 +459,8 @@ ngx_int_t ngx_stream_alg_create_listening_port(ngx_stream_session_t *s)
     ls->ignore = 0;
     ls->fd = -1;
     ls->inherited = 0;
-    ls->alg = 1;
+    ls->alg = 0;
+    ls->child = 1;
     ls->sockaddr = (struct sockaddr *)p;
     ngx_open_one_listening_socket(ls);
     ngx_event_one_listening_init(ls);
