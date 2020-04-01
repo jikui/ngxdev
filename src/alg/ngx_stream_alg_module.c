@@ -170,6 +170,7 @@ ngx_stream_alg_ftp_parse_ip_port(ngx_stream_session_t *s, u_char *buf, ssize_t s
     if ( ngx_strlchr(buf,buf+size-1,',') == NULL) {
         return -1;
     }
+
     s->alg_resolved_peer = ngx_stream_alg_parse_alg_peer(buf,size);
     return 0;
 }
