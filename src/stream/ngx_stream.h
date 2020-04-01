@@ -194,7 +194,6 @@ typedef struct {
 
 struct ngx_stream_session_s {
     uint32_t                       signature;         /* "STRM" */
-
     ngx_connection_t              *connection;
 
     off_t                          received;
@@ -219,6 +218,7 @@ struct ngx_stream_session_s {
 #endif
     ngx_stream_upstream_resolved_t *alg_resolved_peer;
     ngx_stream_alg_handler_pt      alg_handler;
+    ngx_stream_addr_conf_t        *addr_conf;
     ngx_int_t                      phase_handler;
     ngx_uint_t                     status;
 

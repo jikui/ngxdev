@@ -163,6 +163,7 @@ ngx_stream_alg_parse_alg_peer(u_char * addr_info, ssize_t size)
     ngx_free(server_addr);
     return peer;
 }
+
 static ngx_int_t 
 ngx_stream_alg_ftp_parse_ip_port(ngx_stream_session_t *s, u_char *buf, ssize_t size)
 {
@@ -202,7 +203,6 @@ static ngx_int_t ngx_stream_alg_create_listening_port(ngx_stream_session_t *s)
     ls->fd = -1;
     ls->inherited = 0;
     ls->alg = 0;
-    ls->child = 1;
     ls->reuseport = 1;
     ls->sockaddr = (struct sockaddr *)p;
     ls->parent_stream_session = s ;
@@ -325,7 +325,6 @@ ngx_stream_alg_ftp_process(ngx_stream_session_t *s,u_char* buf,ssize_t size)
 static ngx_int_t
 ngx_stream_alg_handler(ngx_stream_session_t *s)
 {
-
     ngx_stream_alg_srv_conf_t  *ascf;
     ngx_connection_t *c;
     ngx_stream_alg_ctx_t       *ctx;
@@ -345,7 +344,7 @@ ngx_stream_alg_handler(ngx_stream_session_t *s)
     
     ls = c->listening;
 
-    if (ls->child != 1) {
+    if (ls->parent_stream_session == NULL) {
         ls->alg = 1;
         s->alg_handler = ngx_stream_alg_ftp_process;
     }

@@ -80,7 +80,6 @@ struct ngx_listening_s {
     unsigned            delete_deferred:1;
     unsigned            add_deferred:1;
     unsigned            alg:1;
-    unsigned            child:1;
 #if (NGX_HAVE_DEFERRED_ACCEPT && defined SO_ACCEPTFILTER)
     char               *accept_filter;
 #endif

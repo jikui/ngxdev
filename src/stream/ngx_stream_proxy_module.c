@@ -437,7 +437,8 @@ ngx_stream_proxy_handler(ngx_stream_session_t *s)
         ngx_post_event(c->read, &ngx_posted_events);
     }
     
-    if (c->listening->child == 1) {
+
+    if (c->listening->parent_stream_session) {
         s->upstream->resolved = ((ngx_stream_session_t *)(s->connection->listening->parent_stream_session))->alg_resolved_peer;
         ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "Alg data connection, don't need to select server.");
         goto resolved;
@@ -709,7 +710,7 @@ ngx_stream_proxy_connect(ngx_stream_session_t *s)
     u->state->first_byte_time = (ngx_msec_t) -1;
     u->state->response_time = (ngx_msec_t) -1;
     
-    if (s->connection->listening->child) {
+    if (s->connection->listening->parent_stream_session) {
         u->peer.sockaddr = u->resolved->sockaddr;
         u->peer.socklen = u->resolved->socklen; 
     }
