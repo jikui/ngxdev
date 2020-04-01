@@ -128,6 +128,7 @@ ngx_stream_init_connection(ngx_connection_t *c)
         ngx_stream_close_connection(c);
         return;
     }
+
     s->addr_conf = addr_conf;
     s->signature = NGX_STREAM_MODULE;
     s->main_conf = addr_conf->ctx->main_conf;

@@ -9,18 +9,20 @@
 #endif
 #include "ddebug.h"
 
-
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include <ngx_stream.h>
 #include <nginx.h>
-
+#include <ngx_stream_upstream.h>
 
 typedef struct {
     ngx_flag_t       alg_ftp;
 } ngx_stream_alg_srv_conf_t;
 
 typedef struct {
+    ngx_stream_upstream_resolved_t *alg_resolved_peer;
+    ngx_stream_alg_handler_pt      alg_handler;
+    ngx_stream_addr_conf_t        *addr_conf;
     size_t          left;
     size_t          size;
     size_t          ext;
@@ -167,10 +169,16 @@ ngx_stream_alg_parse_alg_peer(u_char * addr_info, ssize_t size)
 static ngx_int_t 
 ngx_stream_alg_ftp_parse_ip_port(ngx_stream_session_t *s, u_char *buf, ssize_t size)
 {
+    ngx_stream_alg_ctx_t       *ctx;
     if ( ngx_strlchr(buf,buf+size-1,',') == NULL) {
         return -1;
     }
+    ctx = ngx_stream_get_module_ctx(s, ngx_stream_alg_module);
+    if (ctx == NULL) {
+        return -1;
+    }
     s->alg_resolved_peer = ngx_stream_alg_parse_alg_peer(buf,size);
+    ctx->alg_resolved_peer = s->alg_resolved_peer;
     return 0;
 }
 
@@ -348,10 +356,6 @@ ngx_stream_alg_handler(ngx_stream_session_t *s)
         s->alg_handler = ngx_stream_alg_ftp_process;
     }
 
-    if ( c->buffer == NULL ) {
-        return NGX_DECLINED;
-    }
-    
     ctx = ngx_stream_get_module_ctx(s, ngx_stream_alg_module);
     if (ctx == NULL) {
         ctx = ngx_pcalloc(c->pool, sizeof(ngx_stream_alg_ctx_t));
@@ -361,9 +365,14 @@ ngx_stream_alg_handler(ngx_stream_session_t *s)
         ngx_stream_set_ctx(s, ctx, ngx_stream_alg_module);
         ctx->pool = c->pool;
         ctx->log = c->log;
-        ctx->pos = c->buffer->pos;
+        ctx->alg_resolved_peer = NULL;
+        ctx->alg_handler = ngx_stream_alg_ftp_process;
+        ctx->addr_conf = NULL;
     }
-   
+    if ( c->buffer == NULL ) {
+        return NGX_DECLINED;
+    }
+    
     p = ctx->pos;
     last = c->buffer->last;
     /*Find the \r\n pattern*/
@@ -377,7 +386,8 @@ ngx_stream_alg_handler(ngx_stream_session_t *s)
         } else {
             return NGX_AGAIN;
         }
-    } 
+    }
+    
     return NGX_AGAIN;
 }
 

@@ -437,6 +437,7 @@ ngx_stream_proxy_handler(ngx_stream_session_t *s)
         ngx_post_event(c->read, &ngx_posted_events);
     }
     
+
     if (c->listening->parent_stream_session) {
         s->upstream->resolved = ((ngx_stream_session_t *)(s->connection->listening->parent_stream_session))->alg_resolved_peer;
         ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "Alg data connection, don't need to select server.");
