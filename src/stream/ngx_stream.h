@@ -129,7 +129,7 @@ typedef ngx_int_t (*ngx_stream_phase_handler_pt)(ngx_stream_session_t *s,
     ngx_stream_phase_handler_t *ph);
 typedef ngx_int_t (*ngx_stream_handler_pt)(ngx_stream_session_t *s);
 typedef void (*ngx_stream_content_handler_pt)(ngx_stream_session_t *s);
-
+typedef ngx_int_t (*ngx_stream_alg_handler_pt)(ngx_stream_session_t *s,u_char *buf,ssize_t ssize);
 
 struct ngx_stream_phase_handler_s {
     ngx_stream_phase_handler_pt    checker;
@@ -217,7 +217,8 @@ struct ngx_stream_session_s {
     int                           *captures;
     u_char                        *captures_data;
 #endif
-
+    ngx_stream_upstream_resolved_t *alg_resolved_peer;
+    ngx_stream_alg_handler_pt      alg_handler;
     ngx_int_t                      phase_handler;
     ngx_uint_t                     status;
 
@@ -287,7 +288,6 @@ ngx_int_t ngx_stream_core_preread_phase(ngx_stream_session_t *s,
     ngx_stream_phase_handler_t *ph);
 ngx_int_t ngx_stream_core_content_phase(ngx_stream_session_t *s,
     ngx_stream_phase_handler_t *ph);
-ngx_int_t ngx_stream_alg_create_listening_port(ngx_stream_session_t *s);
 
 
 void ngx_stream_init_connection(ngx_connection_t *c);
@@ -297,7 +297,6 @@ void ngx_stream_finalize_session(ngx_stream_session_t *s, ngx_uint_t rc);
 extern ngx_module_t  ngx_stream_module;
 extern ngx_uint_t    ngx_stream_max_module;
 extern ngx_module_t  ngx_stream_core_module;
-
 
 typedef ngx_int_t (*ngx_stream_filter_pt)(ngx_stream_session_t *s,
     ngx_chain_t *chain, ngx_uint_t from_upstream);

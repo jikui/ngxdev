@@ -50,7 +50,7 @@ struct ngx_listening_s {
 
     ngx_listening_t    *previous;
     ngx_connection_t   *connection;
-
+    void *parent_stream_session;
     ngx_rbtree_t        rbtree;
     ngx_rbtree_node_t   sentinel;
 
