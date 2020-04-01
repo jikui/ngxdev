@@ -50,7 +50,7 @@ struct ngx_listening_s {
 
     ngx_listening_t    *previous;
     ngx_connection_t   *connection;
-
+    void *parent_stream_session;
     ngx_rbtree_t        rbtree;
     ngx_rbtree_node_t   sentinel;
 
@@ -80,7 +80,6 @@ struct ngx_listening_s {
     unsigned            delete_deferred:1;
     unsigned            add_deferred:1;
     unsigned            alg:1;
-    unsigned            child:1;
 #if (NGX_HAVE_DEFERRED_ACCEPT && defined SO_ACCEPTFILTER)
     char               *accept_filter;
 #endif
