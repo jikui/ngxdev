@@ -122,7 +122,6 @@ typedef enum {
     NGX_STREAM_LOG_PHASE
 } ngx_stream_phases;
 
-
 typedef struct ngx_stream_phase_handler_s  ngx_stream_phase_handler_t;
 
 typedef ngx_int_t (*ngx_stream_phase_handler_pt)(ngx_stream_session_t *s,
@@ -216,9 +215,6 @@ struct ngx_stream_session_s {
     int                           *captures;
     u_char                        *captures_data;
 #endif
-    ngx_stream_upstream_resolved_t *alg_resolved_peer;
-    ngx_stream_alg_handler_pt      alg_handler;
-    ngx_stream_addr_conf_t        *addr_conf;
     ngx_int_t                      phase_handler;
     ngx_uint_t                     status;
 

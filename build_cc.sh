@@ -11,7 +11,8 @@ cdir=`cd $(dirname $0); pwd`
             conf*)
                 # ./configure --prefix=$tgtdir
                 #./configure --with-debug --with-stream --with-stream_ssl_module --with-cc=/usr/bin/cc --with-cc-opt='-O0 -g' --prefix=$tgtdir 
-                ./configure --add-module=src/alg/ --with-debug --with-stream --with-cc=/usr/bin/cc --with-cc-opt='-O0 -g' --prefix=$tgtdir 
+                #./configure --with-debug --with-stream --with-stream_alg --with-cc=/usr/bin/cc --with-cc-opt='-O0 -g' --prefix=$tgtdir 
+                ./configure --with-debug --with-stream --with-cc=/usr/bin/cc --with-cc-opt='-O0 -g' --prefix=$tgtdir 
                 ;;
             make)
                 #bear make
@@ -19,6 +20,9 @@ cdir=`cd $(dirname $0); pwd`
                 ;;
             install)
                 make install
+                ;;
+            clean)
+                make clean
                 ;;
             *)
                 echo "$0 [conf[igure]|make|install]"

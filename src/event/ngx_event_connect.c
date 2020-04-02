@@ -30,16 +30,12 @@ ngx_event_connect_peer(ngx_peer_connection_t *pc)
     ngx_socket_t       s;
     ngx_event_t       *rev, *wev;
     ngx_connection_t  *c;
-    if (pc->get) {
-        rc = pc->get(pc, pc->data);
-        if (rc != NGX_OK) {
-            return rc;
-        }
-    } else {
-        ngx_log_debug0(NGX_LOG_DEBUG_EVENT, pc->log, 0, "alg session");
+    
+    rc = pc->get(pc, pc->data);
+    if (rc != NGX_OK) {
+        return rc;
     }
 
-    
     type = (pc->type ? pc->type : SOCK_STREAM);
 
     s = ngx_socket(pc->sockaddr->sa_family, type, 0);
