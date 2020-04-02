@@ -1039,6 +1039,18 @@ if [ $STREAM != NO ]; then
         . auto/module
     fi
 
+    if [ $STREAM_ALG = YES ]; then
+        have=NGX_STREAM_ALG . auto/have
+
+        ngx_module_name=ngx_stream_alg_module
+        ngx_module_deps=src/stream/ngx_stream_alg_module.h
+        ngx_module_srcs=src/stream/ngx_stream_alg_module.c
+        ngx_module_libs=
+        ngx_module_link=$STREAM_ALG
+
+        . auto/module
+    fi
+
     if [ $STREAM_REALIP = YES ]; then
         ngx_module_name=ngx_stream_realip_module
         ngx_module_deps=

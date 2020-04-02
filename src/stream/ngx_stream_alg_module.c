@@ -1,41 +1,13 @@
 
 /*
- * Copyright (C) Yichun Zhang (agentzh)
+ * Copyright (C) Jikui Pei
  */
-
-
-#ifndef DDEBUG
-#define DDEBUG 0
-#endif
-#include "ddebug.h"
 
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include <ngx_stream.h>
 #include <nginx.h>
-#include <ngx_stream_upstream.h>
-
-typedef struct {
-    ngx_flag_t       alg_ftp;
-} ngx_stream_alg_srv_conf_t;
-
-typedef struct {
-    ngx_stream_upstream_resolved_t *alg_resolved_peer;
-    ngx_stream_alg_handler_pt      alg_handler;
-    ngx_stream_addr_conf_t        *addr_conf;
-    size_t          left;
-    size_t          size;
-    size_t          ext;
-    u_char         *pos;
-    u_char         *dst;
-    u_char          buf[4];
-    u_char          version[2];
-    ngx_str_t       host;
-    ngx_str_t       alpn;
-    ngx_log_t      *log;
-    ngx_pool_t     *pool;
-    ngx_uint_t      state;
-} ngx_stream_alg_ctx_t;
+#include <ngx_stream_alg_module.h>
 
 static ngx_int_t ngx_stream_alg_init(ngx_conf_t *cf);
 static ngx_int_t ngx_stream_alg_handler(ngx_stream_session_t *s);
@@ -177,8 +149,7 @@ ngx_stream_alg_ftp_parse_ip_port(ngx_stream_session_t *s, u_char *buf, ssize_t s
     if (ctx == NULL) {
         return -1;
     }
-    s->alg_resolved_peer = ngx_stream_alg_parse_alg_peer(buf,size);
-    ctx->alg_resolved_peer = s->alg_resolved_peer;
+    ctx->alg_resolved_peer = ngx_stream_alg_parse_alg_peer(buf,size);
     return 0;
 }
 
@@ -353,7 +324,7 @@ ngx_stream_alg_handler(ngx_stream_session_t *s)
 
     if (ls->parent_stream_session == NULL) {
         ls->alg = 1;
-        s->alg_handler = ngx_stream_alg_ftp_process;
+        //s->alg_handler = ngx_stream_alg_ftp_process;
     }
 
     ctx = ngx_stream_get_module_ctx(s, ngx_stream_alg_module);
@@ -367,7 +338,7 @@ ngx_stream_alg_handler(ngx_stream_session_t *s)
         ctx->log = c->log;
         ctx->alg_resolved_peer = NULL;
         ctx->alg_handler = ngx_stream_alg_ftp_process;
-        ctx->addr_conf = NULL;
+       
     }
     if ( c->buffer == NULL ) {
         return NGX_DECLINED;
@@ -387,7 +358,6 @@ ngx_stream_alg_handler(ngx_stream_session_t *s)
             return NGX_AGAIN;
         }
     }
-    
     return NGX_AGAIN;
 }
 

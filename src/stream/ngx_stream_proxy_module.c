@@ -8,7 +8,9 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include <ngx_stream.h>
-
+# if (NGX_STREAM_ALG)
+    #include <ngx_stream_alg_module.h>
+#endif
 
 typedef struct {
     ngx_addr_t                      *addr;
@@ -17,7 +19,6 @@ typedef struct {
     ngx_uint_t                       transparent; /* unsigned  transparent:1; */
 #endif
 } ngx_stream_upstream_local_t;
-
 
 typedef struct {
     ngx_msec_t                       connect_timeout;
@@ -436,22 +437,33 @@ ngx_stream_proxy_handler(ngx_stream_session_t *s)
     if (c->read->ready) {
         ngx_post_event(c->read, &ngx_posted_events);
     }
-    
-
-    if (c->listening->parent_stream_session) {
-        s->upstream->resolved = ((ngx_stream_session_t *)(s->connection->listening->parent_stream_session))->alg_resolved_peer;
-        ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "Alg data connection, don't need to select server.");
+#if (NGX_STREAM_ALG)
+    ngx_stream_session_t *parent;
+    parent = c->listening->parent_stream_session;
+    if (parent) {
+        ngx_stream_alg_ctx_t       *ctx;
+        ctx = ngx_stream_get_module_ctx(parent, ngx_stream_alg_module);
+        if (ctx && ctx->alg_resolved_peer) {
+            s->upstream->resolved = ctx->alg_resolved_peer;
+            goto resolved;
+            ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "Alg data connection, don't need to select server.");
+        } else {
+            /*error*/
+        }
         goto resolved;
     } else {
         ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "Need to select server.");
     }
+#endif
     if (pscf->upstream_value) {
         if (ngx_stream_proxy_eval(s, pscf) != NGX_OK) {
             ngx_stream_proxy_finalize(s, NGX_STREAM_INTERNAL_SERVER_ERROR);
             return;
         }
     }
+#if (NGX_STREAM_ALG)
 resolved:
+#endif
     if (u->resolved == NULL) {
 
         uscf = pscf->upstream;
@@ -709,11 +721,18 @@ ngx_stream_proxy_connect(ngx_stream_session_t *s)
     u->state->connect_time = (ngx_msec_t) -1;
     u->state->first_byte_time = (ngx_msec_t) -1;
     u->state->response_time = (ngx_msec_t) -1;
-    
-    if (s->connection->listening->parent_stream_session) {
-        u->peer.sockaddr = u->resolved->sockaddr;
-        u->peer.socklen = u->resolved->socklen; 
+#if (NGX_STREAM_ALG)
+    ngx_stream_session_t *parent;
+    parent = s->connection->listening->parent_stream_session;
+    if (parent) {
+        ngx_stream_alg_ctx_t       *ctx;
+        ctx = ngx_stream_get_module_ctx(parent, ngx_stream_alg_module);
+        if (ctx && ctx->alg_resolved_peer) {
+            u->peer.sockaddr = ctx->alg_resolved_peer->sockaddr;
+            u->peer.socklen = ctx->alg_resolved_peer->socklen; 
+        }
     }
+#endif
     rc = ngx_event_connect_peer(&u->peer);
 
     ngx_log_debug1(NGX_LOG_DEBUG_STREAM, c->log, 0, "proxy connect: %i", rc);
@@ -1506,7 +1525,6 @@ ngx_stream_proxy_process(ngx_stream_session_t *s, ngx_uint_t from_upstream,
     off_t                        *received, limit;
     size_t                        size, limit_rate;
     ssize_t                       n;
-    ngx_int_t                     new_size;
     ngx_buf_t                    *b;
     ngx_int_t                     rc;
     ngx_uint_t                    flags, *packets;
@@ -1639,13 +1657,17 @@ ngx_stream_proxy_process(ngx_stream_session_t *s, ngx_uint_t from_upstream,
                     }
                 }
 
-                if (s->alg_handler) {
-                    new_size = s->alg_handler(s,b->last,n);
+#if (NGX_STREAM_ALG)
+                ngx_int_t                 new_size;
+                ngx_stream_alg_ctx_t       *ctx;
+                ctx = ngx_stream_get_module_ctx(s, ngx_stream_alg_module);
+                if (ctx && ctx->alg_handler) {
+                    new_size = ctx->alg_handler(s,b->last,n);
                     if (new_size > 0) {
                         n = new_size;
                     }
                 }
-
+#endif
                 for (ll = out; *ll; ll = &(*ll)->next) { /* void */ }
 
                 cl = ngx_chain_get_free_buf(c->pool, &u->free);
