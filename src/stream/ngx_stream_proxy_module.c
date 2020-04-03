@@ -1894,6 +1894,7 @@ ngx_stream_proxy_finalize(ngx_stream_session_t *s, ngx_uint_t rc)
         /*child session. Need to close the listening socket.*/
         /*TODO the listening sockets needs to be orgnized*/    
         ngx_close_connection(s->connection->listening->connection);
+        ngx_pfree(s->connection->pool,s->connection->listening);
     }
 #endif
     u = s->upstream;

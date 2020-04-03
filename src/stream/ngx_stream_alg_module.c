@@ -158,6 +158,9 @@ static ngx_int_t ngx_stream_alg_create_listening_port(ngx_stream_session_t *s)
     ngx_listening_t             *ls_ctl;
     ngx_int_t  port_num = 2180 + times;
     times ++;
+    times %= 50;
+    ngx_log_debug1(NGX_LOG_DEBUG_STREAM, s->connection->log, 0,
+                   "create listening socket on port number: %ud",port_num);
 
     ls_ctl = s->connection->listening;
     if (ls_ctl == NULL) {
@@ -171,7 +174,7 @@ static ngx_int_t ngx_stream_alg_create_listening_port(ngx_stream_session_t *s)
     sin->sin_family = AF_INET;
     sin->sin_port = htons(port_num);
     sin->sin_addr.s_addr = INADDR_ANY;
-    ls = ngx_array_push((ngx_array_t *)&ngx_cycle->listening);
+    ls = ngx_pcalloc(s->connection->pool,sizeof(ngx_listening_t));
     *ls =  *ls_ctl;
     ls->ignore = 0;
     ls->fd = -1;
