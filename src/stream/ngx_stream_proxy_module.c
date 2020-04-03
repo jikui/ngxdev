@@ -437,7 +437,6 @@ ngx_stream_proxy_handler(ngx_stream_session_t *s)
     if (c->read->ready) {
         ngx_post_event(c->read, &ngx_posted_events);
     }
-<<<<<<< HEAD
 #if (NGX_STREAM_ALG)
     ngx_stream_session_t *parent;
     parent = c->listening->parent_stream_session;
