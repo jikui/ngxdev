@@ -227,6 +227,7 @@ ngx_stream_alg_ftp_process(ngx_stream_session_t *s,u_char* buf,ssize_t size)
                 return 0;
             }
             entering_alg = 1;
+
         } else if (ngx_strstr(command,port) != NULL) {
             ngx_log_debug2(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
                 "%s:Entering Port Mode.%s",__func__,command);
@@ -289,6 +290,7 @@ ngx_stream_alg_ftp_process(ngx_stream_session_t *s,u_char* buf,ssize_t size)
             number = new_buf - buf;
         }
     }
+
     ngx_pfree(c->pool,command);
 
     return number;
