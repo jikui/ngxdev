@@ -435,36 +435,6 @@ found:
 }
 
 ngx_conf_t * stream_cf = NULL;
-ngx_int_t ngx_stream_alg_create_listening_port(ngx_stream_session_t *s)
-{
-    u_char * p;
-    struct sockaddr_in          *sin;
-    ngx_listening_t             *ls;
-    ngx_listening_t             *ls_ctl;
-
-    ls_ctl = s->connection->listening;
-    if (ls_ctl == NULL) {
-        return NGX_ERROR;
-    }
-    p = ngx_pcalloc(s->connection->pool, sizeof(struct sockaddr_in));
-    if (p == NULL) {
-        return NGX_ERROR;
-    }
-    sin = (struct sockaddr_in *) p;
-    sin->sin_family = AF_INET;
-    sin->sin_port = htons(2180);
-    sin->sin_addr.s_addr = INADDR_ANY;
-    ls = ngx_array_push((ngx_array_t *)&ngx_cycle->listening);
-    *ls =  *ls_ctl;
-    ls->ignore = 0;
-    ls->fd = -1;
-    ls->inherited = 0;
-    ls->alg = 1;
-    ls->sockaddr = (struct sockaddr *)p;
-    ngx_open_one_listening_socket(ls);
-    ngx_event_one_listening_init(ls);
-    return NGX_OK;
-}
 static char *
 ngx_stream_optimize_servers(ngx_conf_t *cf, ngx_array_t *ports)
 {

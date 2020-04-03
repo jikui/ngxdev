@@ -38,10 +38,11 @@ ngx_stream_init_connection(ngx_connection_t *c)
     ngx_stream_core_srv_conf_t   *cscf;
     ngx_stream_core_main_conf_t  *cmcf;
 
-    /* find the server configuration for the address:port */
 
+    /*if the the listening socket has parent session. Then pick the addr_conf from the 
+     * parent session instead of to pick on.*/
     port = c->listening->servers;
-    
+
     if (port->naddrs > 1) {
 
         /*
@@ -62,56 +63,56 @@ ngx_stream_init_connection(ngx_connection_t *c)
         switch (sa->sa_family) {
 
 #if (NGX_HAVE_INET6)
-        case AF_INET6:
-            sin6 = (struct sockaddr_in6 *) sa;
+            case AF_INET6:
+                sin6 = (struct sockaddr_in6 *) sa;
 
-            addr6 = port->addrs;
+                addr6 = port->addrs;
 
-            /* the last address is "*" */
+                /* the last address is "*" */
 
-            for (i = 0; i < port->naddrs - 1; i++) {
-                if (ngx_memcmp(&addr6[i].addr6, &sin6->sin6_addr, 16) == 0) {
-                    break;
+                for (i = 0; i < port->naddrs - 1; i++) {
+                    if (ngx_memcmp(&addr6[i].addr6, &sin6->sin6_addr, 16) == 0) {
+                        break;
+                    }
                 }
-            }
 
-            addr_conf = &addr6[i].conf;
+                addr_conf = &addr6[i].conf;
 
-            break;
+                break;
 #endif
 
-        default: /* AF_INET */
-            sin = (struct sockaddr_in *) sa;
+            default: /* AF_INET */
+                sin = (struct sockaddr_in *) sa;
 
-            addr = port->addrs;
+                addr = port->addrs;
 
-            /* the last address is "*" */
+                /* the last address is "*" */
 
-            for (i = 0; i < port->naddrs - 1; i++) {
-                if (addr[i].addr == sin->sin_addr.s_addr) {
-                    break;
+                for (i = 0; i < port->naddrs - 1; i++) {
+                    if (addr[i].addr == sin->sin_addr.s_addr) {
+                        break;
+                    }
                 }
-            }
 
-            addr_conf = &addr[i].conf;
+                addr_conf = &addr[i].conf;
 
-            break;
+                break;
         }
 
     } else {
         switch (c->local_sockaddr->sa_family) {
 
 #if (NGX_HAVE_INET6)
-        case AF_INET6:
-            addr6 = port->addrs;
-            addr_conf = &addr6[0].conf;
-            break;
+            case AF_INET6:
+                addr6 = port->addrs;
+                addr_conf = &addr6[0].conf;
+                break;
 #endif
 
-        default: /* AF_INET */
-            addr = port->addrs;
-            addr_conf = &addr[0].conf;
-            break;
+            default: /* AF_INET */
+                addr = port->addrs;
+                addr_conf = &addr[0].conf;
+                break;
         }
     }
 

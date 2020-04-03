@@ -457,7 +457,6 @@ ngx_stream_upstream_get_round_robin_peer(ngx_peer_connection_t *pc, void *data)
     } else {
 
         /* there are several peers */
-
         peer = ngx_stream_upstream_get_peer(rrp);
 
         if (peer == NULL) {

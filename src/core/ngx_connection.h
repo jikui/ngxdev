@@ -50,12 +50,13 @@ struct ngx_listening_s {
 
     ngx_listening_t    *previous;
     ngx_connection_t   *connection;
-
     ngx_rbtree_t        rbtree;
     ngx_rbtree_node_t   sentinel;
 
     ngx_uint_t          worker;
-
+#if (NGX_STREAM_ALG)
+    void *parent_stream_session;
+#endif
     unsigned            open:1;
     unsigned            remain:1;
     unsigned            ignore:1;
@@ -79,7 +80,9 @@ struct ngx_listening_s {
     unsigned            deferred_accept:1;
     unsigned            delete_deferred:1;
     unsigned            add_deferred:1;
+#if (NGX_STREAM_ALG)
     unsigned            alg:1;
+#endif
 #if (NGX_HAVE_DEFERRED_ACCEPT && defined SO_ACCEPTFILTER)
     char               *accept_filter;
 #endif
