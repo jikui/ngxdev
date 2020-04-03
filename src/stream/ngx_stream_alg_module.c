@@ -21,7 +21,8 @@ static ngx_command_t  ngx_stream_alg_commands[] = {
       ngx_stream_alg_alg,
       NGX_STREAM_SRV_CONF_OFFSET,
       0,
-      NULL },
+      NULL 
+    },
       
     ngx_null_command
 };
@@ -180,7 +181,6 @@ static ngx_int_t ngx_stream_alg_create_listening_port(ngx_stream_session_t *s)
     ls->ignore = 0;
     ls->fd = -1;
     ls->inherited = 0;
-    ls->alg = 0;
     ls->reuseport = 1;
     ls->sockaddr = (struct sockaddr *)p;
     ls->parent_stream_session = s ;
@@ -215,7 +215,7 @@ ngx_stream_alg_ftp_process(ngx_stream_session_t *s,u_char* buf,ssize_t size)
     if (ngx_strncmp(command +size -1 -2,CRLF,2) != 0 ) {
         ngx_log_debug1(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
                 "%s find a full sentence with \"\\r\\n\"",__func__);
-        if (ngx_strstr(command,pasv) != NULL) {
+        if (ngx_strncmp(command,pasv,sizeof(pasv)) != 0) {
             ngx_log_debug2(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
                 "%s:Entering Passive Mode.%s",__func__,command);
             left_brace = ngx_strlchr(command,command + size -1,'(');
@@ -227,7 +227,7 @@ ngx_stream_alg_ftp_process(ngx_stream_session_t *s,u_char* buf,ssize_t size)
                 return 0;
             }
             entering_alg = 1;
-        }else if (ngx_strstr(command,port) != NULL) {
+        }else if (ngx_strncmp(command,port,sizeof(port)) != 0) {
             ngx_log_debug2(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
                 "%s:Entering Port Mode.%s",__func__,command);
             left_brace = ngx_strlchr(command,command + size -1,' ');
@@ -293,8 +293,6 @@ ngx_stream_alg_ftp_process(ngx_stream_session_t *s,u_char* buf,ssize_t size)
             ngx_free(new_buf);
         }
     }
-    ngx_log_debug3(NGX_LOG_DEBUG_STREAM,s->connection->log,0,
-            "%s Prepare for alg process: Length is %z  buf is %s",__func__,size,buf);
     ngx_free(command);
 
     return number;
@@ -306,8 +304,6 @@ ngx_stream_alg_handler(ngx_stream_session_t *s)
     ngx_stream_alg_srv_conf_t  *ascf;
     ngx_connection_t *c;
     ngx_stream_alg_ctx_t       *ctx;
-    u_char                             *last, *p;
-    ssize_t    len;
     ngx_listening_t             *ls;
 
     ascf = ngx_stream_get_module_srv_conf(s,ngx_stream_alg_module);
@@ -321,43 +317,25 @@ ngx_stream_alg_handler(ngx_stream_session_t *s)
     }
     
     ls = c->listening;
-
-    if (ls->parent_stream_session == NULL) {
-        ls->alg = 1;
-        //s->alg_handler = ngx_stream_alg_ftp_process;
-    }
-
-    ctx = ngx_stream_get_module_ctx(s, ngx_stream_alg_module);
-    if (ctx == NULL) {
-        ctx = ngx_pcalloc(c->pool, sizeof(ngx_stream_alg_ctx_t));
+    
+    /*Only create the context for parent sessions*/
+    if (ls->parent_stream_session == NULL ) {
+        ctx = ngx_stream_get_module_ctx(s, ngx_stream_alg_module);
         if (ctx == NULL) {
-            return NGX_ERROR;
+            ctx = ngx_pcalloc(c->pool, sizeof(ngx_stream_alg_ctx_t));
+            if (ctx == NULL) {
+                return NGX_ERROR;
+            }
+            ngx_stream_set_ctx(s, ctx, ngx_stream_alg_module);
+            ctx->alg_resolved_peer = NULL;
+            ctx->alg_handler = ngx_stream_alg_ftp_process;
+
         }
-        ngx_stream_set_ctx(s, ctx, ngx_stream_alg_module);
-        ctx->pool = c->pool;
-        ctx->log = c->log;
-        ctx->alg_resolved_peer = NULL;
-        ctx->alg_handler = ngx_stream_alg_ftp_process;
-       
     }
     if ( c->buffer == NULL ) {
         return NGX_DECLINED;
     }
     
-    p = ctx->pos;
-    last = c->buffer->last;
-    /*Find the \r\n pattern*/
-    len = last - p;
-    if (len >= 2 ) {
-        /*If find the "\r\n*/
-        if (ngx_strncmp(p,CRLF,ngx_strlen(CRLF)) != 0) {
-            p += len;
-            ctx->pos = p;
-            return NGX_DECLINED;
-        } else {
-            return NGX_AGAIN;
-        }
-    }
     return NGX_AGAIN;
 }
 

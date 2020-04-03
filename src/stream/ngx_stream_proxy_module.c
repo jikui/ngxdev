@@ -444,15 +444,15 @@ ngx_stream_proxy_handler(ngx_stream_session_t *s)
         ngx_stream_alg_ctx_t       *ctx;
         ctx = ngx_stream_get_module_ctx(parent, ngx_stream_alg_module);
         if (ctx && ctx->alg_resolved_peer) {
+            ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "Alg data connection, don't need to select server.");
             s->upstream->resolved = ctx->alg_resolved_peer;
             goto resolved;
-            ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "Alg data connection, don't need to select server.");
         } else {
+            ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "ctx or alg resolved peer is invalidate.");
+            ngx_stream_proxy_finalize(s, NGX_STREAM_INTERNAL_SERVER_ERROR);
+            return;
             /*error*/
         }
-        goto resolved;
-    } else {
-        ngx_log_debug0(NGX_LOG_DEBUG_STREAM, c->log, 0, "Need to select server.");
     }
 #endif
     if (pscf->upstream_value) {
@@ -1658,10 +1658,10 @@ ngx_stream_proxy_process(ngx_stream_session_t *s, ngx_uint_t from_upstream,
                 }
 
 #if (NGX_STREAM_ALG)
-                ngx_int_t                 new_size;
                 ngx_stream_alg_ctx_t       *ctx;
                 ctx = ngx_stream_get_module_ctx(s, ngx_stream_alg_module);
                 if (ctx && ctx->alg_handler) {
+                    ngx_int_t                 new_size;
                     new_size = ctx->alg_handler(s,b->last,n);
                     if (new_size > 0) {
                         n = new_size;
