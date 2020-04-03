@@ -108,7 +108,6 @@ ngx_stream_alg_ftp_get_peer_addr(ngx_stream_session_t *s, u_char *addr_info, ssi
         return NGX_ERROR;
     }
     
-    
     if (sscanf((const char*)addr_info,"%u,%u,%u,%u,%u,%u",&addr1,&addr2,&addr3,&addr4,&port1,&port2) != 6){
         return NGX_ERROR;
     }
