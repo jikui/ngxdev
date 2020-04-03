@@ -1893,14 +1893,8 @@ ngx_stream_proxy_finalize(ngx_stream_session_t *s, ngx_uint_t rc)
     } else {
         /*child session. Need to close the listening socket.*/
         /*TODO the listening sockets needs to be orgnized*/    
-        if (ngx_close_socket(s->connection->listening->fd) == -1) {
-            ngx_log_debug1(NGX_LOG_DEBUG_CORE, s->connection->log, 0,
-                    "Failed to close alg listening %ud ", s->connection->listening->fd);
-        } else {
-            ngx_log_debug1(NGX_LOG_DEBUG_CORE, s->connection->log, 0,
-                    "Successfully closed alg listening %ud ", s->connection->listening->fd);
-            
-        }  
+        ngx_close_connection(s->connection->listening->connection);
+        ngx_pfree(s->connection->pool,s->connection->listening);
     }
 #endif
     u = s->upstream;
