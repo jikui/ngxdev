@@ -1,12 +1,12 @@
 # ngxdev
 Introducation:
 
-ALG MODULE for NGINX. Currently only ftp alg is supported.
+ALG MODULE support for NGINX and only ftp alg is supported currently.
 
 How TO Use?
-1) configure for adding the alg module into the nginx
+1) configure to add the alg module into the nginx
   ./configure --with-stream --with-stream_alg ...
-2) add the "alg ftp" into the upstream server syntax scope.
+2) add the "alg ftp" option into the upstream server syntax scope.
    
    server {
    
